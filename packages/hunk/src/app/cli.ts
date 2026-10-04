@@ -13,6 +13,7 @@ import {
   type PagerCommandInput,
   type ParsedCliInput,
   type SelfUpdateCommandInput,
+  type SessionCommandOutput,
   type SessionCommentListType,
   type SessionCommentApplyItemInput,
 } from "../core/run/commandInputs";
@@ -57,6 +58,11 @@ import {
 import { DEFAULT_FILE_GAP, DEFAULT_HUNK_GAP, parseReviewGap } from "../core/run/reviewGap";
 import { DEFAULT_TAB_WIDTH, parseTabWidth } from "../core/run/tabWidth";
 import { resolveCliVersion } from "../core/run/version";
+import {
+  DEFAULT_WHEEL_SCROLL_LINES,
+  parseWheelScrollLines,
+  type WheelScrollLines,
+} from "../core/run/wheelScrollLines";
 import type { ExtensionVcsHistoryReviewAction } from "../extension-api/types";
 
 /** Structured option metadata shared by Commander registration and generated CLI docs. */
@@ -71,6 +77,7 @@ export interface CliReferenceOption {
     | "tabWidth"
     | "fileGap"
     | "hunkGap"
+    | "wheelScrollLines"
     | "collect";
   readonly defaultValue?: string;
   /** Default applied directly by Commander (as opposed to a config-resolved default). */
@@ -139,6 +146,12 @@ export const COMMON_REVIEW_OPTIONS = [
     parse: "hunkGap",
     defaultValue: String(DEFAULT_HUNK_GAP),
   },
+  {
+    flag: "--wheel-scroll-lines <lines>",
+    description: "rows per wheel event: auto or 1-10",
+    parse: "wheelScrollLines",
+    defaultValue: DEFAULT_WHEEL_SCROLL_LINES,
+  },
   { flag: "--wrap", description: "wrap long diff lines" },
   { flag: "--no-wrap", description: "truncate long diff lines to one row" },
   { flag: "--hunk-headers", description: "show hunk metadata rows" },
@@ -155,6 +168,16 @@ export const COMMON_REVIEW_OPTIONS = [
     parse: "collect",
   },
   { flag: "--no-extensions", description: "disable user extensions for this run" },
+  {
+    flag: "--disable-extension <id>",
+    description: "disable one bundled or user extension for this run (repeatable)",
+    parse: "collect",
+  },
+  {
+    flag: "--enable-extension <id>",
+    description: "re-enable one extension for this run (repeatable)",
+    parse: "collect",
+  },
 ] as const satisfies readonly CliReferenceOption[];
 
 /** Auto-refresh flag shared by review commands whose inputs can be reopened. */
@@ -249,6 +272,16 @@ export const CLI_REFERENCE_COMMANDS = {
         parse: "collect",
       },
       { flag: "--no-extensions", description: "disable user extensions for this run" },
+      {
+        flag: "--disable-extension <id>",
+        description: "disable one bundled or user extension for this run (repeatable)",
+        parse: "collect",
+      },
+      {
+        flag: "--enable-extension <id>",
+        description: "re-enable one extension for this run (repeatable)",
+        parse: "collect",
+      },
     ],
   },
   "stash-show": {
@@ -363,6 +396,32 @@ export const CLI_REFERENCE_COMMANDS = {
     synopsis: ["hunk daemon serve"],
     aliases: ["hunk mcp serve"],
   },
+  "daemon-status": {
+    path: "daemon status",
+    summary: "report the running session daemon's build, uptime, and attached windows",
+    synopsis: ["hunk daemon status [--json]"],
+    details: [
+      "After a Hunk upgrade, a daemon from the previous build keeps running while any window holds it open, and windows or `hunk session` commands from the new build cannot attach to it. `status` shows which build the daemon is, how it compares to this CLI, and which windows are attached; attached windows are marked `(older build)` when they could not reconnect to a daemon started from this CLI.",
+      "A daemon from a Hunk release before this command cannot report its build; `status` then shows what its launch metadata recorded.",
+    ],
+    options: [{ flag: "--json", description: "print the status as JSON" }],
+  },
+  "daemon-restart": {
+    path: "daemon restart",
+    summary: "stop the running session daemon and start one from this Hunk build",
+    synopsis: ["hunk daemon restart [--yes] [--json]"],
+    details: [
+      "Prints the same summary as `status`, asks for confirmation, stops the daemon, and starts a replacement from this CLI's binary. Windows from this build that could not attach register with the replacement on their own; windows from the old build are disconnected and must be relaunched, which loses their in-window notes. The daemon is never replaced automatically.",
+      "A daemon from a Hunk release before this command cannot be asked to stop; `restart` then asks separately before sending SIGTERM to the pid its launch metadata recorded.",
+    ],
+    options: [
+      {
+        flag: "--yes",
+        description: "skip the confirmation prompts (required when stdin is not a terminal)",
+      },
+      { flag: "--json", description: "print the result as JSON" },
+    ],
+  },
 } as const satisfies Record<string, CliReferenceCommand>;
 
 /** Validate one requested layout mode from CLI input. */
@@ -452,10 +511,12 @@ function buildCommonOptions(
     tabWidth?: number;
     fileGap?: number;
     hunkGap?: number;
+    wheelScrollLines?: WheelScrollLines;
     extension?: string[];
   },
   argv: string[],
 ): CommonOptions {
+  const extensionSelectionOverrides = parseExtensionSelectionOverrides(argv.slice(2));
   return {
     mode: options.mode,
     cursorLine: options.cursorLine,
@@ -478,6 +539,7 @@ function buildCommonOptions(
     tabWidth: options.tabWidth,
     fileGap: options.fileGap,
     hunkGap: options.hunkGap,
+    wheelScrollLines: options.wheelScrollLines,
     wrapLines: resolveBooleanFlag(argv, "--wrap", "--no-wrap"),
     hunkHeaders: resolveBooleanFlag(argv, "--hunk-headers", "--no-hunk-headers"),
     sidebar: resolveBooleanFlag(argv, "--sidebar", "--no-sidebar"),
@@ -488,6 +550,7 @@ function buildCommonOptions(
     extensions: resolveBooleanFlag(argv, "--extensions", "--no-extensions"),
     extensionPaths:
       options.extension && options.extension.length > 0 ? options.extension : undefined,
+    ...(extensionSelectionOverrides.length > 0 ? { extensionSelectionOverrides } : {}),
   };
 }
 
@@ -508,6 +571,8 @@ function applyReferenceOption(command: Command, option: CliReferenceOption) {
     commanderOption.argParser((value: string) => parseReviewGap(value, "file gap"));
   } else if (option.parse === "hunkGap") {
     commanderOption.argParser((value: string) => parseReviewGap(value, "hunk gap"));
+  } else if (option.parse === "wheelScrollLines") {
+    commanderOption.argParser(parseWheelScrollLines);
   } else if (option.parse === "collect") {
     commanderOption.argParser(collectRepeatedValue);
   }
@@ -580,6 +645,7 @@ function renderCliHelp() {
     "  hunk diff --files <left> <right>        compare two concrete files",
     "  hunk show [target] [-- <pathspec...>]   review the last commit or a given target",
     "  hunk log [target] [-- <pathspec...>]    browse an attractive repository history",
+    "  hunk gh <pr|commit|compare>             review changes hosted on GitHub",
     "  hunk stash show [ref]                   review a stash entry (git only)",
     "  hunk patch [file]                       review a patch file or stdin",
     "  hunk pager                              general Git pager wrapper with diff detection",
@@ -591,6 +657,8 @@ function renderCliHelp() {
     "  hunk extension <subcommand>             install and manage shared extensions",
     "  hunk update [version]                   update Hunk with the package manager that installed it",
     "  hunk daemon serve                       run the local Hunk session daemon",
+    "  hunk daemon status                      report the daemon's build and attached windows",
+    "  hunk daemon restart                     replace the daemon with one from this build",
     "",
     "Global options:",
     "  -h, --help                              show help",
@@ -615,6 +683,8 @@ function renderCliHelp() {
     "  --theme <theme>                         named theme override",
     "  --extension <path>                      load an extension entry file or directory (repeatable)",
     "  --no-extensions                         disable user extensions for this run",
+    "  --disable-extension <id>                disable one extension for this run (repeatable)",
+    "  --enable-extension <id>                 re-enable one extension for this run (repeatable)",
     "",
     "Git diff options:",
     "  --staged, --cached                      review staged changes",
@@ -1068,6 +1138,7 @@ async function parseHistoryCommand(
   const extensionPaths = Array.isArray(options.extension)
     ? options.extension.filter((value): value is string => typeof value === "string")
     : [];
+  const extensionSelectionOverrides = parseExtensionSelectionOverrides(tokens);
 
   return {
     kind: "history",
@@ -1088,6 +1159,7 @@ async function parseHistoryCommand(
     ...(typeof options.vcs === "string" ? { vcs: options.vcs } : {}),
     extensionsEnabled: extensionsEnabled && options.extensions !== false,
     extensionPaths,
+    ...(extensionSelectionOverrides.length > 0 ? { extensionSelectionOverrides } : {}),
   };
 }
 
@@ -1181,6 +1253,8 @@ function requireReloadableCliInput(input: ParsedCliInput): CliInput {
     input.kind === "help" ||
     input.kind === "pager" ||
     input.kind === "daemon-serve" ||
+    input.kind === "daemon-status" ||
+    input.kind === "daemon-restart" ||
     input.kind === "markup-render" ||
     input.kind === "markup-guide" ||
     input.kind === "extension-manage" ||
@@ -2114,7 +2188,34 @@ async function parseUpdateCommand(
   };
 }
 
-/** Parse `hunk daemon serve` as the canonical local daemon entrypoint. */
+/** Build the help text for one daemon control subcommand from its reference entry. */
+function renderDaemonControlHelp(command: "daemon-status" | "daemon-restart") {
+  const reference = CLI_REFERENCE_COMMANDS[command];
+  return (
+    [
+      `Usage: ${reference.synopsis[0]}`,
+      "",
+      `${reference.summary[0]!.toUpperCase()}${reference.summary.slice(1)}.`,
+      "",
+      "Options:",
+      ...reference.options.map((option) => `  ${option.flag.padEnd(30)} ${option.description}`),
+    ].join("\n") + "\n"
+  );
+}
+
+/** Parse the flags shared by `hunk daemon status` and `hunk daemon restart`. */
+function parseDaemonControlFlags(subcommand: "status" | "restart", tokens: string[]) {
+  let output: SessionCommandOutput = "text";
+  let yes = false;
+  for (const token of tokens) {
+    if (token === "--json") output = "json";
+    else if (token === "--yes" && subcommand === "restart") yes = true;
+    else throw new Error(`Unknown option for \`hunk daemon ${subcommand}\`: ${token}`);
+  }
+  return { output, yes };
+}
+
+/** Parse `hunk daemon serve|status|restart`. */
 async function parseDaemonCommand(tokens: string[]): Promise<ParsedCliInput> {
   const [subcommand, ...rest] = tokens;
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
@@ -2122,9 +2223,12 @@ async function parseDaemonCommand(tokens: string[]): Promise<ParsedCliInput> {
       kind: "help",
       text:
         [
-          "Usage: hunk daemon serve",
+          "Usage: hunk daemon <subcommand>",
           "",
-          "Run the local Hunk session daemon and websocket session broker.",
+          "Subcommands:",
+          "  hunk daemon serve                  run the local Hunk session daemon and websocket session broker",
+          "  hunk daemon status [--json]        report the daemon's build, uptime, and attached windows",
+          "  hunk daemon restart [--yes]        replace the daemon with one from this Hunk build",
           "",
           "Environment:",
           "  HUNK_MCP_HOST                  bind host (default 127.0.0.1; loopback only unless explicitly overridden)",
@@ -2134,8 +2238,21 @@ async function parseDaemonCommand(tokens: string[]): Promise<ParsedCliInput> {
     };
   }
 
+  if (subcommand === "status" || subcommand === "restart") {
+    const command = subcommand === "status" ? "daemon-status" : "daemon-restart";
+    if (rest.includes("--help") || rest.includes("-h")) {
+      return { kind: "help", text: renderDaemonControlHelp(command) };
+    }
+    const flags = parseDaemonControlFlags(subcommand, rest);
+    return command === "daemon-status"
+      ? { kind: "daemon-status", output: flags.output }
+      : { kind: "daemon-restart", output: flags.output, yes: flags.yes };
+  }
+
   if (subcommand !== "serve") {
-    throw new Error("Only `hunk daemon serve` is supported.");
+    throw new Error(
+      "Only `hunk daemon serve`, `hunk daemon status`, and `hunk daemon restart` are supported.",
+    );
   }
 
   if (rest.includes("--help") || rest.includes("-h")) {
@@ -2213,6 +2330,7 @@ interface LeadingCliFlags {
   args: string[];
   extensionPaths: string[];
   extensionsEnabled: boolean;
+  extensionSelectionOverrides: import("../core/run/extensionSelection").ExtensionSelectionOverride[];
   extensionFlagTokens: string[];
   prefixedReviewFlags: string[];
 }
@@ -2224,13 +2342,45 @@ function isLeadingHostFlag(token: string) {
     token === AUXILIARY_AGENT_OPTIONS.experimental.flag ||
     token === "--no-extensions" ||
     token === "--extension" ||
-    token.startsWith("--extension=")
+    token.startsWith("--extension=") ||
+    token === "--disable-extension" ||
+    token.startsWith("--disable-extension=") ||
+    token === "--enable-extension" ||
+    token.startsWith("--enable-extension=")
   );
+}
+
+/** Parse ordered extension enable/disable operations from host-owned CLI tokens. */
+function parseExtensionSelectionOverrides(tokens: readonly string[]) {
+  const overrides: import("../core/run/extensionSelection").ExtensionSelectionOverride[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "--") break;
+    const enabled = Boolean(
+      token === "--enable-extension" || token?.startsWith("--enable-extension="),
+    );
+    const disabled = Boolean(
+      token === "--disable-extension" || token?.startsWith("--disable-extension="),
+    );
+    if (!enabled && !disabled) continue;
+
+    const separator = token?.indexOf("=") ?? -1;
+    const id = separator >= 0 ? token!.slice(separator + 1) : tokens[++index];
+    if (id === undefined || id.trim().length === 0 || (separator < 0 && isLeadingHostFlag(id))) {
+      throw new Error(
+        `\`${enabled ? "--enable-extension" : "--disable-extension"}\` requires an extension id.`,
+      );
+    }
+    overrides.push({ id: id.trim(), enabled });
+  }
+  return overrides;
 }
 
 /** Split host-owned leading flags from the command token without touching its subtree. */
 function parseLeadingCliFlags(rawArgs: string[]): LeadingCliFlags {
   const extensionPaths: string[] = [];
+  const extensionSelectionOverrides: import("../core/run/extensionSelection").ExtensionSelectionOverride[] =
+    [];
   const extensionFlagTokens: string[] = [];
   const prefixedReviewFlags: string[] = [];
   let extensionsEnabled = true;
@@ -2271,6 +2421,30 @@ function parseLeadingCliFlags(rawArgs: string[]): LeadingCliFlags {
       index += 1;
       continue;
     }
+    if (token === "--disable-extension" || token === "--enable-extension") {
+      const id = rawArgs[index + 1];
+      if (id === undefined || isLeadingHostFlag(id) || id.trim().length === 0) {
+        throw new Error(`\`${token}\` requires an extension id.`);
+      }
+      const enabled = token === "--enable-extension";
+      extensionSelectionOverrides.push({ id: id.trim(), enabled });
+      extensionFlagTokens.push(token, id);
+      index += 2;
+      continue;
+    }
+    if (token?.startsWith("--disable-extension=") || token?.startsWith("--enable-extension=")) {
+      const separator = token.indexOf("=");
+      const id = token.slice(separator + 1).trim();
+      if (id.length === 0) {
+        throw new Error(`\`${token.slice(0, separator)}\` requires an extension id.`);
+      }
+      const flag = token.slice(0, separator);
+      const enabled = flag === "--enable-extension";
+      extensionSelectionOverrides.push({ id, enabled });
+      extensionFlagTokens.push(flag, id);
+      index += 1;
+      continue;
+    }
     break;
   }
 
@@ -2278,6 +2452,7 @@ function parseLeadingCliFlags(rawArgs: string[]): LeadingCliFlags {
     args: rawArgs.slice(index),
     extensionPaths,
     extensionsEnabled,
+    extensionSelectionOverrides,
     extensionFlagTokens,
     prefixedReviewFlags,
   };
@@ -2292,8 +2467,14 @@ function hasPrefixedReviewFlag(argv: string[], flag: string) {
 export async function parseCli(argv: string[]): Promise<ParsedCliInput> {
   const rawArgs = argv.slice(2);
   const leading = parseLeadingCliFlags(rawArgs);
-  const { args, extensionPaths, extensionsEnabled, extensionFlagTokens, prefixedReviewFlags } =
-    leading;
+  const {
+    args,
+    extensionPaths,
+    extensionsEnabled,
+    extensionSelectionOverrides,
+    extensionFlagTokens,
+    prefixedReviewFlags,
+  } = leading;
   const prefixedFast = prefixedReviewFlags.includes("--fast");
   const [explicitCommandName, ...rest] = args;
   const commandName = explicitCommandName ?? (prefixedFast ? "diff" : undefined);
@@ -2372,6 +2553,7 @@ export async function parseCli(argv: string[]): Promise<ParsedCliInput> {
         args: rest,
         extensionPaths,
         extensionsEnabled,
+        ...(extensionSelectionOverrides.length > 0 ? { extensionSelectionOverrides } : {}),
       };
   }
 }

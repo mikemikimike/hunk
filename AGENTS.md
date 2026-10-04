@@ -13,6 +13,7 @@
 packages/hunk/                 published CLI, application, and public extension/OpenTUI facades
 packages/hunk-vcs/             private dependency-bottom VCS helpers
 packages/hunk-{git,jj,sapling}/ private bundled VCS providers
+packages/hunk-gh/              private bundled GitHub review extension
 packages/session-broker-core/  low-level broker protocol and state
 packages/session-broker/       runtime-neutral broker, daemon, auth, and connection lifecycle
 packages/session-broker-{bun,node}/ runtime listener adapters
@@ -77,13 +78,22 @@ ReviewIntent + caller facts -> planReviewIntent -> ReviewAction[] -> reducer -> 
   review stays same-origin with no CORS; each session mints its capability and gives the daemon only
   its digest. Transport semantics come from the browser-safe review protocol modules and the
   existing intent path. See `docs/browser-review-rebuild.md` and the relevant module headers.
-- User extensions, bundled VCS providers, and bundled UI share one public registration API and
-  registry model, but use separate registry instances and lifecycles. `ExtensionSession` owns the
+- User extensions, bundled VCS providers, bundled core commands, and bundled UI share one public
+  registration API and registry model. VCS and UI use dedicated registries; bundled core commands
+  load first into each session-owned extension registry so delegated resources share its lifecycle. `ExtensionSession` owns the
   user registry across routed surfaces. Keep `packages/hunk/src/extension-api/types.ts` import-free,
   bundled VCS renderer-free, repo-local extensions trust-gated, and bundled extensions active under
   `--no-extensions`. See `docs/extension-architecture.md`, `docs/extensions.md`, and
   `packages/hunk/skills/hunk-extensions/SKILL.md`.
 - Sidecar file order is intentional sidebar and review-stream order.
+- **Session wire:** the daemon and every window exchange `HUNK_SESSION_DAEMON_VERSION`
+  (`packages/hunk/src/session/protocol.ts`) in the signed hello and require an exact match. Any
+  change to what a session registers or snapshots — under `packages/hunk/src/session/**`,
+  `packages/hunk/src/core/reviewDescriptor.ts`, `packages/hunk/src/app/session/registration.ts`, or
+  anything else that appears in `packages/hunk/src/session/broker/fixtures/session-wire.v<N>.json`
+  — requires a bump. `wire.snapshot.test.ts` enforces it; bump, run
+  `bun run generate:session-wire`, and delete the previous fixture in the same change. The
+  cross-revision admin scope (`status`/`stop`) is frozen separately and never grows in place.
 - Derive shared rendering, navigation, scrolling, and note behavior from one planning layer. Make
   shared geometry explicit, and remove obsolete paths instead of retaining parallel implementations.
 

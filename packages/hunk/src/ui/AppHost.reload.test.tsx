@@ -41,6 +41,7 @@ function createTestHostClient(options?: { replaceSessionError?: Error }) {
         if (options?.replaceSessionError) throw options.replaceSessionError;
         registration = nextRegistration;
       },
+      subscribeConnectionNotice: () => () => undefined,
       setBridge: (nextBridge: Bridge) => {
         bridge = nextBridge;
       },
@@ -205,7 +206,7 @@ describe("reload theme catalog", () => {
         }),
       ).rejects.toThrow(publicationError.message);
 
-      expect(themeController.getSnapshot()).toEqual({
+      expect(themeController.getSnapshot()).toMatchObject({
         themeId: "dracula",
         customThemes: [{ id: "original", accent: "#112233" }],
       });

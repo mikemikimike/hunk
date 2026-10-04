@@ -7,8 +7,8 @@ The extension factory receives one API object. Registration calls are only valid
 
 ## `hunk.apiVersion`
 
-The API generation this Hunk speaks (currently `23`). Branch on it if you want
-one file to support several Hunk versions. Version 23 adds canonical unified-layout fields while preserving the previous event vocabulary; version 22 adds frame-derived pane preferred sizing, non-resizable dynamic panes, and commit-history paint tokens; version 21 adds optional inclusive history-range review
+The API generation this Hunk speaks (currently `28`). Branch on it if you want
+one file to support several Hunk versions. Version 28 adds host-owned syntax highlighting for file-view code documents; version 27 adds `ctx.selection.files`, the visible files in review order; version 26 adds the status line (`ctx.statusLine` items and `ctx.prompts.line()` inline prompts); version 25 adds Promise-returning watch signatures and watch cancellation; version 24 adds review metadata to VCS patch results and short display revisions to commit descriptors; version 23 adds canonical unified-layout fields while preserving the previous event vocabulary; version 22 adds frame-derived pane preferred sizing, non-resizable dynamic panes, and commit-history paint tokens; version 21 adds optional inclusive history-range review
 planning and bounded comparison commit summaries; version 20 adds optional commit timestamps to review
 metadata, pane clipboard actions, and the `theme.copyAction` paint token; version 19 adds provider-owned history enumeration and review planning; version 18 lets
 lifecycle and custom-event handlers request a host-owned review reload; version 17 adds structured review metadata to delegated
@@ -99,17 +99,17 @@ naming the bad token, so keep both to one short line:
 hunk: Unknown command: nosuchthing
 
 Extension commands available here:
-hunk gh <number|owner/repo#number|pull-request-url> [--repo <owner/repo>] — Review a GitHub pull request
+hunk gh <pr|commit|compare> <target> [--repo <owner/repo>] — Review GitHub-hosted changes
 ```
 
 For a complete implementation, see the dependency-free
-[`github-pr` example](https://github.com/modem-dev/hunk/tree/main/examples/extensions/github-pr).
+bundled [`@hunk/gh` extension](https://github.com/modem-dev/hunk/tree/main/packages/hunk-gh/src).
 It fetches GitHub PR diffs directly, delegates a temporary patch with
 restrictive POSIX modes (and inherited temporary-directory ACLs on Windows)
 into Hunk, and cleans the patch up on shutdown:
 
 ```bash
-hunk --extension ./examples/extensions/github-pr gh 123
+hunk gh pr 123
 ```
 
 ## `hunk.configureSession(options)`

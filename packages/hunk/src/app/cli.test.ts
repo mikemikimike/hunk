@@ -133,6 +133,8 @@ describe("parseCli", () => {
       "notes.json",
       "--no-line-numbers",
       "-x4",
+      "--wheel-scroll-lines",
+      "3",
       "--wrap",
       "--no-hunk-headers",
       "--agent-notes",
@@ -153,12 +155,27 @@ describe("parseCli", () => {
         experimental: true,
         lineNumbers: false,
         tabWidth: 4,
+        wheelScrollLines: 3,
         wrapLines: true,
         hunkHeaders: false,
         agentNotes: true,
         transparentBackground: true,
       },
     });
+  });
+
+  test("parses wheel scroll lines and rejects invalid values", async () => {
+    const automatic = await parseCli(["bun", "hunk", "diff", "--wheel-scroll-lines", "auto"]);
+    const fixed = await parseCli(["bun", "hunk", "diff", "--wheel-scroll-lines", "5"]);
+
+    expect(automatic).toMatchObject({ kind: "vcs", options: { wheelScrollLines: "auto" } });
+    expect(fixed).toMatchObject({ kind: "vcs", options: { wheelScrollLines: 5 } });
+
+    for (const invalid of ["0", "11", "fast"]) {
+      await expect(
+        parseCli(["bun", "hunk", "diff", "--wheel-scroll-lines", invalid]),
+      ).rejects.toThrow(/wheel scroll lines/);
+    }
   });
 
   test("parses the current-line style and rejects an unknown one", async () => {
@@ -1868,11 +1885,46 @@ describe("parseCli command help text", () => {
     );
   });
 
+  test("parses the daemon status and restart commands", async () => {
+    await expect(parseCli(["bun", "hunk", "daemon", "status"])).resolves.toEqual({
+      kind: "daemon-status",
+      output: "text",
+    });
+    await expect(parseCli(["bun", "hunk", "daemon", "status", "--json"])).resolves.toEqual({
+      kind: "daemon-status",
+      output: "json",
+    });
+    await expect(parseCli(["bun", "hunk", "daemon", "restart"])).resolves.toEqual({
+      kind: "daemon-restart",
+      output: "text",
+      yes: false,
+    });
+    await expect(
+      parseCli(["bun", "hunk", "daemon", "restart", "--yes", "--json"]),
+    ).resolves.toEqual({ kind: "daemon-restart", output: "json", yes: true });
+    await expect(parseCli(["bun", "hunk", "daemon", "status", "--yes"])).rejects.toThrow(
+      "Unknown option for `hunk daemon status`: --yes",
+    );
+    await expect(parseCli(["bun", "hunk", "daemon", "stop"])).rejects.toThrow(
+      "Only `hunk daemon serve`, `hunk daemon status`, and `hunk daemon restart` are supported.",
+    );
+  });
+
   test("renders the daemon overview and the daemon serve command help", async () => {
     const overview = await expectHelp(["daemon"]);
-    expect(overview).toContain("Usage: hunk daemon serve");
+    expect(overview).toContain("Usage: hunk daemon <subcommand>");
+    expect(overview).toContain("hunk daemon serve");
+    expect(overview).toContain("hunk daemon status [--json]");
+    expect(overview).toContain("hunk daemon restart [--yes]");
     expect(overview).toContain("HUNK_MCP_PORT");
     expect(overview).toBe(await expectHelp(["daemon", "--help"]));
+
+    expect(await expectHelp(["daemon", "status", "--help"])).toContain(
+      "Usage: hunk daemon status [--json]",
+    );
+    const restartHelp = await expectHelp(["daemon", "restart", "--help"]);
+    expect(restartHelp).toContain("Usage: hunk daemon restart [--yes] [--json]");
+    expect(restartHelp).toContain("--yes");
 
     expect(await expectHelp(["daemon", "serve", "--help"])).toContain(
       "Run the local Hunk session daemon and websocket session broker.",
@@ -2070,7 +2122,7 @@ describe("parseCli argument validation", () => {
       parseCli(["bun", "hunk", "skill", "path", "hunk-review", "extra"]),
     ).rejects.toThrow("`hunk skill path` accepts at most one skill name.");
     await expect(parseCli(["bun", "hunk", "daemon", "bogus"])).rejects.toThrow(
-      "Only `hunk daemon serve` is supported.",
+      "Only `hunk daemon serve`, `hunk daemon status`, and `hunk daemon restart` are supported.",
     );
     await expect(parseCli(["bun", "hunk", "stash", "bogus"])).rejects.toThrow(
       "Only `hunk stash show` is supported.",
@@ -2418,6 +2470,57 @@ describe("parseCli extension flags", () => {
     expect(parsed.options.extensionPaths).toEqual([first, second]);
   });
 
+  test("preserves ordered enable and disable overrides before or after a review command", async () => {
+    const parsed = await parseCli([
+      "bun",
+      "hunk",
+      "--disable-extension",
+      "hunk.gh",
+      "show",
+      "HEAD",
+      "--enable-extension=hunk.gh",
+      "--disable-extension",
+      "tool",
+    ]);
+
+    if (parsed.kind !== "show") {
+      throw new Error("Expected a show command.");
+    }
+
+    expect(parsed.options.extensionSelectionOverrides).toEqual([
+      { id: "hunk.gh", enabled: false },
+      { id: "hunk.gh", enabled: true },
+      { id: "tool", enabled: false },
+    ]);
+  });
+
+  test("does not read extension-selection-shaped pathspecs after --", async () => {
+    const parsed = await parseCli(["bun", "hunk", "diff", "--", "--disable-extension", "hunk.gh"]);
+
+    if (parsed.kind !== "vcs") {
+      throw new Error("Expected a VCS diff command.");
+    }
+    expect(parsed.pathspecs).toEqual(["--disable-extension", "hunk.gh"]);
+    expect(parsed.options.extensionSelectionOverrides).toBeUndefined();
+  });
+
+  test("carries leading selection overrides into extension CLI lookup", async () => {
+    const parsed = await parseCli([
+      "bun",
+      "hunk",
+      "--disable-extension=hunk.gh",
+      "gh",
+      "pr",
+      "123",
+    ]);
+
+    expect(parsed).toMatchObject({
+      kind: "extension-cli",
+      commandName: "gh",
+      extensionSelectionOverrides: [{ id: "hunk.gh", enabled: false }],
+    });
+  });
+
   test("documents the extension flags in top-level help", async () => {
     const parsed = await parseCli(["bun", "hunk"]);
 
@@ -2427,6 +2530,8 @@ describe("parseCli extension flags", () => {
 
     expect(parsed.text).toContain("--extension <path>");
     expect(parsed.text).toContain("--no-extensions");
+    expect(parsed.text).toContain("--disable-extension <id>");
+    expect(parsed.text).toContain("--enable-extension <id>");
   });
 });
 

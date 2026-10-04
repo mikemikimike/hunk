@@ -27,6 +27,9 @@ const UI_SESSION_ADAPTERS = [
 const PRODUCTION_ENTRY_POINTS = [
   "^packages/hunk/src/main\\.tsx$",
   "^packages/hunk/src/highlightWorkerEntry\\.ts$",
+  // Account for Pierre's shiki/wasm alias from untraversed node_modules and its ambient asset types.
+  "^packages/hunk/src/lib/shikiWasm\\.ts$",
+  "^packages/hunk/src/lib/shikiWasmAssets\\.d\\.ts$",
   "^packages/hunk/src/opentui/index\\.ts$",
   "^packages/hunk/src/extension-api/index\\.ts$",
   "^packages/hunk/src/hunk-review/skillDocument\\.ts$",
@@ -71,6 +74,17 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/hunk-vcs/src/" },
       to: { path: "^packages/", pathNot: "^packages/hunk-vcs/src/" },
+    },
+    {
+      name: "hunk-gh-stays-on-extension-contract",
+      comment:
+        "@hunk/gh owns the bundled GitHub workflow and may reach only its local modules and the public extension contract.",
+      severity: "error",
+      from: { path: "^packages/hunk-gh/src/" },
+      to: {
+        path: "^packages/",
+        pathNot: "^packages/hunk-gh/src/|^packages/hunk/src/extension-api/",
+      },
     },
     {
       name: "hunk-git-stays-on-vcs-contract",
@@ -215,7 +229,7 @@ module.exports = {
       severity: "error",
       from: {
         path: "^packages/(?!hunk/)",
-        pathNot: "^packages/hunk-(git|jj|sapling)/",
+        pathNot: "^packages/hunk-(gh|git|jj|sapling)/",
       },
       to: { path: "^packages/hunk/src/" },
     },

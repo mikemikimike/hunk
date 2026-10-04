@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { dirname, join } from "node:path";
 import { sanitizeTerminalLine } from "../../lib/terminalText";
 import { BUNDLED_SHIKI_THEME_IDS, LEGACY_THEME_ID_ALIASES } from "../theme/catalog";
+import { TERMINAL_THEME_ID } from "../theme/terminalColors";
 import {
   createInvalidThemeIdNotice,
   createThemeCollisionNotice,
@@ -26,6 +27,7 @@ import {
   validateReviewGap,
 } from "./reviewGap";
 import { DEFAULT_TAB_WIDTH, validateTabWidth } from "./tabWidth";
+import { DEFAULT_WHEEL_SCROLL_LINES, validateWheelScrollLines } from "./wheelScrollLines";
 import { findProjectRootCandidate } from "../process/projectRoot";
 import { createVcsCatalog, detectVcs } from "../vcs";
 import type { VcsCatalog } from "../vcs/types";
@@ -34,6 +36,7 @@ import type {
   CustomSyntaxScopesConfig,
   NamedCustomThemeConfig,
 } from "../../extension-api/types";
+import { normalizeExtensionSelectionIds } from "./extensionSelection";
 import {
   isLayoutModeInput,
   normalizeLayoutModeInput,
@@ -55,6 +58,12 @@ export interface ExtensionsConfig {
    * installed, not to drop VCS support.
    */
   enabled: boolean;
+  /** Exact extension identities disabled by the user config layer. */
+  userDisabled?: readonly string[];
+  /** Exact extension identities disabled by the repository config layer. */
+  repoDisabled?: readonly string[];
+  /** Effective config deny-list, retained for inspection and management UX. */
+  disabled?: readonly string[];
   /** Explicit entry paths from the user config layer. */
   paths: string[];
   /** Explicit entry paths contributed by the repo config layer; trust-gated like `.hunk/extensions`. */
@@ -89,7 +98,8 @@ export interface PersistedViewPreferences {
 export const BUILT_IN_THEME_IDS = BUNDLED_SHIKI_THEME_IDS;
 // Widen the large literal tuple before formatting it, avoiding TypeScript's deep tuple inference.
 const BUILT_IN_THEME_IDS_FOR_MESSAGES: readonly string[] = BUILT_IN_THEME_IDS;
-const DEFAULT_THEME_ID = "github-dark-default";
+const DEFAULT_THEME_ID = TERMINAL_THEME_ID;
+const DEFAULT_CUSTOM_THEME_BASE_ID = "github-dark-default";
 const DEFAULT_VIEW_PREFERENCES: PersistedViewPreferences = {
   mode: "auto",
   showLineNumbers: true,
@@ -297,6 +307,19 @@ function normalizeReviewGap(value: unknown, key: "file_gap" | "hunk_gap") {
   return validateReviewGap(value, key);
 }
 
+/** Accept `auto` or a bounded integer wheel step from TOML configuration. */
+function normalizeWheelScrollLines(value: unknown) {
+  if (value === undefined || value === DEFAULT_WHEEL_SCROLL_LINES) {
+    return value;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error("Expected wheel_scroll_lines to be auto or an integer from 1 to 10.");
+  }
+
+  return validateWheelScrollLines(value, "wheel_scroll_lines");
+}
+
 /** One top-level configuration key shared by runtime parsing and generated reference docs. */
 export interface ConfigReferenceOption {
   readonly key: string;
@@ -311,6 +334,8 @@ export interface ConfigReferenceOption {
   readonly aliases?: readonly { key: string; deprecated?: boolean }[];
   /** Ordered source keys preserve compatibility precedence where an old alias historically won. */
   readonly runtimeKeys?: readonly string[];
+  /** Machine-local input preferences do not resolve from repository config. */
+  readonly userOnly?: boolean;
 }
 
 /**
@@ -348,7 +373,7 @@ export const CONFIG_REFERENCE_OPTIONS: readonly ConfigReferenceOption[] = [
     key: "theme",
     property: "theme",
     type: "string",
-    accepted: "a built-in theme id or `custom`",
+    accepted: "`terminal`, `auto`, a built-in theme id, or a custom theme id",
     runtimeDefault: DEFAULT_THEME_ID,
     description: "Select the active color theme.",
   },
@@ -400,6 +425,16 @@ export const CONFIG_REFERENCE_OPTIONS: readonly ConfigReferenceOption[] = [
     accepted: `${MIN_REVIEW_GAP} through ${MAX_REVIEW_GAP}`,
     runtimeDefault: DEFAULT_HUNK_GAP,
     description: "Blank rows before each hunk after the first in a file.",
+  },
+  {
+    key: "wheel_scroll_lines",
+    property: "wheelScrollLines",
+    type: "string or integer",
+    accepted: "`auto` or 1 through 10",
+    runtimeDefault: DEFAULT_WHEEL_SCROLL_LINES,
+    description:
+      "Set review rows per vertical wheel event. `auto` keeps cadence-based acceleration from one to three rows.",
+    userOnly: true,
   },
   {
     key: "wrap_lines",
@@ -499,7 +534,7 @@ export const CONFIG_COMMAND_SECTIONS = {
 export const CONFIG_REFERENCE_CUSTOM_THEME = {
   table: "custom_theme",
   baseValues: BUILT_IN_THEME_IDS,
-  defaultBase: DEFAULT_THEME_ID,
+  defaultBase: DEFAULT_CUSTOM_THEME_BASE_ID,
   legacyBaseAliases: LEGACY_THEME_ID_ALIASES,
   colorKeys: CUSTOM_THEME_COLOR_KEYS,
   legacySyntaxColorKeys: LEGACY_CUSTOM_SYNTAX_COLOR_KEYS,
@@ -545,6 +580,14 @@ export const CONFIG_REFERENCE_EXTENSIONS = {
       defaultValue: "`[]`",
       description:
         "Extension entry points loaded at startup. Paths a repository config contributes are trust-gated before they run.",
+    },
+    {
+      key: "extensions.disabled",
+      type: "array of strings",
+      accepted: "exact extension identities",
+      defaultValue: "`[]`",
+      description:
+        "Disable selectable bundled or user extensions before their factories or modules execute. User and repository lists combine as a union.",
     },
   ] as const satisfies readonly ConfigReferenceSectionKey[],
 } as const;
@@ -747,7 +790,7 @@ function mergeCustomTheme(
     ...base,
     ...overrides,
     id: base.id,
-    base: overrides.base ?? base.base ?? DEFAULT_THEME_ID,
+    base: overrides.base ?? base.base ?? DEFAULT_CUSTOM_THEME_BASE_ID,
     label: overrides.label ?? base.label,
     syntaxScopes:
       base.syntaxScopes || overrides.syntaxScopes
@@ -807,6 +850,7 @@ function buildConfigStartupNotices(
 interface ExtensionsLayer {
   enabled?: boolean;
   paths: string[];
+  disabled: string[];
   extensionConfigs: Record<string, Record<string, unknown>>;
 }
 
@@ -850,6 +894,9 @@ function readExtensionsLayer(source: Record<string, unknown>): ExtensionsLayer {
   return {
     enabled: isRecord(extensionsSource) ? normalizeBoolean(extensionsSource.enabled) : undefined,
     paths: isRecord(extensionsSource) ? normalizeStringArray(extensionsSource.paths) : [],
+    disabled: isRecord(extensionsSource)
+      ? normalizeExtensionSelectionIds(normalizeStringArray(extensionsSource.disabled))
+      : [],
     extensionConfigs,
   };
 }
@@ -961,8 +1008,12 @@ function resolveExtensionsConfig(
   repoLayer: ExtensionsLayer,
   extensionsEnabled: boolean | undefined,
 ): ExtensionsConfig {
+  const disabled = normalizeExtensionSelectionIds([...userLayer.disabled, ...repoLayer.disabled]);
   return {
     enabled: extensionsEnabled === false ? false : (repoLayer.enabled ?? userLayer.enabled ?? true),
+    ...(userLayer.disabled.length > 0 ? { userDisabled: userLayer.disabled } : {}),
+    ...(repoLayer.disabled.length > 0 ? { repoDisabled: repoLayer.disabled } : {}),
+    ...(disabled.length > 0 ? { disabled } : {}),
     paths: userLayer.paths,
     repoPaths: repoLayer.paths,
     extensionConfigs: mergeExtensionConfigs(userLayer.extensionConfigs, repoLayer.extensionConfigs),
@@ -986,6 +1037,8 @@ function normalizeConfigReferenceValue(property: keyof CommonOptions, value: unk
       return normalizeReviewGap(value, "file_gap");
     case "hunkGap":
       return normalizeReviewGap(value, "hunk_gap");
+    case "wheelScrollLines":
+      return normalizeWheelScrollLines(value);
     case "sidebar":
       return normalizeSidebarVisibility(value);
     default:
@@ -994,11 +1047,18 @@ function normalizeConfigReferenceValue(property: keyof CommonOptions, value: unk
 }
 
 /** Read the view preferences stored at one TOML object level. */
-function readConfigPreferences(source: Record<string, unknown>): CommonOptions {
+function readConfigPreferences(
+  source: Record<string, unknown>,
+  { includeUserOnly = true }: { includeUserOnly?: boolean } = {},
+): CommonOptions {
   const preferences: CommonOptions = {};
   const mutable = preferences as Record<string, unknown>;
 
   for (const option of CONFIG_REFERENCE_OPTIONS) {
+    if (option.userOnly && !includeUserOnly) {
+      continue;
+    }
+
     const runtimeKeys = option.runtimeKeys ?? [
       option.key,
       ...(option.aliases?.map(({ key }) => key) ?? []),
@@ -1046,6 +1106,7 @@ function mergeOptions(base: CommonOptions, overrides: CommonOptions): CommonOpti
     tabWidth: overrides.tabWidth ?? base.tabWidth,
     fileGap: overrides.fileGap ?? base.fileGap,
     hunkGap: overrides.hunkGap ?? base.hunkGap,
+    wheelScrollLines: overrides.wheelScrollLines ?? base.wheelScrollLines,
     wrapLines: overrides.wrapLines ?? base.wrapLines,
     hunkHeaders: overrides.hunkHeaders ?? base.hunkHeaders,
     menuBar: overrides.menuBar ?? base.menuBar,
@@ -1059,21 +1120,27 @@ function mergeOptions(base: CommonOptions, overrides: CommonOptions): CommonOpti
     colorMoved: overrides.colorMoved ?? base.colorMoved,
     extensions: overrides.extensions ?? base.extensions,
     extensionPaths: overrides.extensionPaths ?? base.extensionPaths,
+    extensionSelectionOverrides:
+      overrides.extensionSelectionOverrides ?? base.extensionSelectionOverrides,
   };
 }
 
 /** Apply one parsed config object, including command/pager sections, to the current invocation. */
-function resolveConfigLayer(source: Record<string, unknown>, input: CliInput): CommonOptions {
-  let resolved = readConfigPreferences(source);
+function resolveConfigLayer(
+  source: Record<string, unknown>,
+  input: CliInput,
+  { includeUserOnly = true }: { includeUserOnly?: boolean } = {},
+): CommonOptions {
+  let resolved = readConfigPreferences(source, { includeUserOnly });
 
   const commandSection = CONFIG_COMMAND_SECTIONS[input.kind] ? source[input.kind] : undefined;
   if (isRecord(commandSection)) {
-    resolved = mergeOptions(resolved, readConfigPreferences(commandSection));
+    resolved = mergeOptions(resolved, readConfigPreferences(commandSection, { includeUserOnly }));
   }
 
   const pagerSection = source.pager;
   if (input.options.pager && isRecord(pagerSection)) {
-    resolved = mergeOptions(resolved, readConfigPreferences(pagerSection));
+    resolved = mergeOptions(resolved, readConfigPreferences(pagerSection, { includeUserOnly }));
   }
 
   return resolved;
@@ -1230,10 +1297,10 @@ export function resolveExtensionBootstrapConfig({
   const sources = readConfigSources(cwd, env, vcsCatalog);
   const userLayer = sources.userConfig
     ? readExtensionsLayer(sources.userConfig)
-    : { paths: [], extensionConfigs: {} };
+    : { paths: [], disabled: [], extensionConfigs: {} };
   const repoLayer = sources.repoConfig
     ? readExtensionsLayer(sources.repoConfig)
-    : { paths: [], extensionConfigs: {} };
+    : { paths: [], disabled: [], extensionConfigs: {} };
   const repoNotice = createRepoExtensionConfigNotice(repoLayer.extensionConfigs);
 
   return {
@@ -1261,8 +1328,8 @@ export function resolveConfiguredCliInput(
   let resolvedCustomThemes: NamedCustomThemeConfig[] = [];
   let usesLegacyCustomSyntax = false;
   const themeNotices = new Map<string, StartupNotice>();
-  let userExtensionsLayer: ExtensionsLayer = { paths: [], extensionConfigs: {} };
-  let repoExtensionsLayer: ExtensionsLayer = { paths: [], extensionConfigs: {} };
+  let userExtensionsLayer: ExtensionsLayer = { paths: [], disabled: [], extensionConfigs: {} };
+  let repoExtensionsLayer: ExtensionsLayer = { paths: [], disabled: [], extensionConfigs: {} };
   // Keybindings are read from the user layer only; see `HunkConfigResolution`.
   let keybindingsLayer: KeybindingsLayer = { bindings: {}, unusableIds: [] };
 
@@ -1299,7 +1366,7 @@ export function resolveConfiguredCliInput(
 
   if (repoConfigPath && sources.repoConfig) {
     const repoConfig = sources.repoConfig;
-    const repoLayer = resolveConfigLayer(repoConfig, input);
+    const repoLayer = resolveConfigLayer(repoConfig, input, { includeUserOnly: false });
     explicitVcsId = repoLayer.vcs ?? explicitVcsId;
     resolvedOptions = mergeOptions(resolvedOptions, repoLayer);
     applyCustomThemeLayer(readCustomThemes(repoConfig));
@@ -1323,6 +1390,7 @@ export function resolveConfiguredCliInput(
     tabWidth: resolvedOptions.tabWidth ?? DEFAULT_TAB_WIDTH,
     fileGap: resolvedOptions.fileGap ?? DEFAULT_FILE_GAP,
     hunkGap: resolvedOptions.hunkGap ?? DEFAULT_HUNK_GAP,
+    wheelScrollLines: resolvedOptions.wheelScrollLines ?? DEFAULT_WHEEL_SCROLL_LINES,
     wrapLines: resolvedOptions.wrapLines ?? DEFAULT_VIEW_PREFERENCES.wrapLines,
     hunkHeaders: resolvedOptions.hunkHeaders ?? DEFAULT_VIEW_PREFERENCES.showHunkHeaders,
     menuBar: resolvedOptions.menuBar ?? DEFAULT_VIEW_PREFERENCES.showMenuBar,

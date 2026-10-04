@@ -14,6 +14,8 @@ import type {
   ExtensionVcsStashShowInput,
 } from "../../extension-api/types";
 import type { InstallSource } from "../install/installSource";
+import type { ExtensionSelectionOverride } from "./extensionSelection";
+import type { WheelScrollLines } from "./wheelScrollLines";
 
 export type LayoutMode = "auto" | "split" | "unified";
 export type LayoutModeInput = LayoutMode | "stack";
@@ -51,6 +53,8 @@ export interface CommonOptions {
   fileGap?: number;
   /** Blank rows before each hunk after the first in a file. */
   hunkGap?: number;
+  /** Review rows to move per vertical mouse-wheel event. */
+  wheelScrollLines?: WheelScrollLines;
   wrapLines?: boolean;
   hunkHeaders?: boolean;
   menuBar?: boolean;
@@ -65,6 +69,8 @@ export interface CommonOptions {
   extensions?: boolean;
   /** Entry paths from repeated `--extension` flags, for development and testing. */
   extensionPaths?: string[];
+  /** Ordered one-run extension enablement overrides. */
+  extensionSelectionOverrides?: ExtensionSelectionOverride[];
 }
 
 /**
@@ -147,6 +153,7 @@ export interface HistoryCommandInput {
   vcs?: string;
   extensionsEnabled: boolean;
   extensionPaths: string[];
+  extensionSelectionOverrides?: ExtensionSelectionOverride[];
 }
 
 export interface HelpCommandInput {
@@ -162,6 +169,22 @@ export interface PagerCommandInput {
 export interface DaemonServeCommandInput {
   kind: "daemon-serve";
 }
+
+/** `hunk daemon status`: report the running daemon's build and attached windows. */
+export interface DaemonStatusCommandInput {
+  kind: "daemon-status";
+  output: SessionCommandOutput;
+}
+
+/** `hunk daemon restart`: stop the running daemon and start one from this CLI's build. */
+export interface DaemonRestartCommandInput {
+  kind: "daemon-restart";
+  output: SessionCommandOutput;
+  /** Skip every confirmation prompt. Required when stdin is not a terminal. */
+  yes: boolean;
+}
+
+export type DaemonControlCommandInput = DaemonStatusCommandInput | DaemonRestartCommandInput;
 
 export type SessionCommandOutput = "text" | "json";
 
@@ -397,6 +420,8 @@ export interface ExtensionCliInvocationInput {
   extensionPaths: string[];
   /** False only when a leading `--no-extensions` hard-disables lookup. */
   extensionsEnabled: boolean;
+  /** Ordered leading one-run extension enablement overrides. */
+  extensionSelectionOverrides?: ExtensionSelectionOverride[];
 }
 
 export interface SelfUpdateCommandInput {
@@ -422,6 +447,7 @@ export type ParsedCliInput =
   | HelpCommandInput
   | PagerCommandInput
   | DaemonServeCommandInput
+  | DaemonControlCommandInput
   | SessionCommandInput
   | MarkupRenderCommandInput
   | MarkupGuideCommandInput

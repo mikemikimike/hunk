@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { createServer } from "node:net";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -102,17 +102,15 @@ function createTestEnvironment(port?: number) {
   const home = resolve(root, "home");
   const cache = resolve(root, "cache");
   const config = resolve(root, "config");
-  const state = resolve(root, "state");
   const runtime = resolve(root, "runtime");
   const temp = resolve(root, "tmp");
-  for (const dir of [home, cache, config, state, runtime, temp]) {
+  for (const dir of [home, cache, config, runtime, temp]) {
     mkdirSync(dir, { recursive: true });
   }
 
   return {
     config,
     home,
-    state,
     temp,
     env: {
       ...process.env,
@@ -120,7 +118,6 @@ function createTestEnvironment(port?: number) {
       USERPROFILE: home,
       XDG_CACHE_HOME: cache,
       XDG_CONFIG_HOME: config,
-      XDG_STATE_HOME: state,
       XDG_RUNTIME_DIR: runtime,
       TMPDIR: temp,
       BUN_TMPDIR: temp,
@@ -263,15 +260,10 @@ describe("compiled headless native-library loading", () => {
     expect(nativeArtifacts(temp)).toEqual([]);
   });
 
-  compiledTest("discovers the installed-shape GitHub extension for literal hunk gh", () => {
-    const { state, env, temp } = createTestEnvironment();
-    const installedPath = resolve(state, "hunk", "extensions", "github-pr");
-    mkdirSync(resolve(state, "hunk", "extensions"), { recursive: true });
-    cpSync(resolve(import.meta.dir, "../../examples/extensions/github-pr"), installedPath, {
-      recursive: true,
-    });
+  compiledTest("runs the bundled GitHub review command without native UI artifacts", () => {
+    const { env, temp } = createTestEnvironment();
 
-    const proc = Bun.spawnSync([executable!, "gh", "--help"], {
+    const proc = Bun.spawnSync([executable!, "--no-extensions", "gh", "--help"], {
       env,
       stdin: "ignore",
       stdout: "pipe",

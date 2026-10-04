@@ -107,6 +107,22 @@ Range selection is disabled with `--all` or author, message, date, and path filt
 After opening a commit or range, quit its normal Hunk review to return to the same selection.
 History controls are configurable through canonical `hunk.history.*` [keybindings](https://hunk.dev/docs/configure/keybindings/).
 
+### Working with GitHub
+
+Hunk bundles `hunk gh`, so pull requests, commits, and comparisons open directly without the
+GitHub CLI or a separate extension:
+
+```bash
+hunk gh pr                         # infer the open PR for the current branch
+hunk gh pr 123                     # infer the repository from origin
+hunk gh pr 'modem-dev/hunk#123'    # quote this form for shells that treat # as a comment
+hunk gh commit a1b2c3d --repo modem-dev/hunk
+hunk gh compare main...feature --repo modem-dev/hunk
+```
+
+Public repositories work anonymously. Set `GH_TOKEN`, or `GITHUB_TOKEN` when it is absent, for
+private repositories and higher API limits. GitHub Enterprise is not currently supported.
+
 ### Working with Jujutsu and Sapling
 
 Hunk auto-detects Jujutsu and Sapling checkouts, so `hunk diff [revset]` and `hunk show [revset]` use native revsets inside jj or Sapling workspaces. `hunk log --vcs jj` also reads JJ history directly, including in a non-colocated workspace. To override VCS detection, set `vcs = "git"` or `vcs = "jj"` or `vcs = "sl"` in [config](#config).
@@ -163,7 +179,7 @@ You can persist preferences to a config file:
 Example:
 
 ```toml
-theme = "github-dark-default" # any built-in theme id, auto, or custom
+theme = "terminal"   # terminal, auto, any built-in theme id, or custom
 mode = "auto"        # auto, split, unified
 vcs = "git"          # git, jj, sl
 watch = false
@@ -172,6 +188,7 @@ line_numbers = true
 tab_width = 4        # tab stops, 1-16
 file_gap = 1         # rows between files, including the ─ rule; 0 hides it
 hunk_gap = 0         # blank rows before later hunks
+wheel_scroll_lines = "auto" # auto acceleration, or a fixed 1-10 rows per event
 wrap_lines = false
 menu_bar = true
 animations = true
@@ -188,6 +205,7 @@ syntax scopes, and legacy syntax-table migration.
 `exclude_untracked` affects Git/Sapling working-tree `hunk diff` sessions only.
 `tab_width` controls source-code tab stops and can be overridden with `-x4` or `--tab-width 4`.
 `file_gap` is separator height between files, including the `─` rule; `hunk_gap` is blank rows before later hunks.
+`wheel_scroll_lines` is a user-only preference and can be overridden with `--wheel-scroll-lines 3`.
 Set `animations = false` to make panes open and close immediately.
 `prompt_save_view_preferences = false` disables the quit prompt for saving changed view preferences.
 `transparent_background` can also be written as `transparentBackground`.
@@ -290,8 +308,7 @@ topic.
 
 See [the extension guide](https://hunk.dev/docs/extend/extensions/) for the full API, the trust model,
 publishing guidance, and the `[extensions]` / `[extension.<id>]` config reference.
-Installable examples include a dependency-free
-[`hunk gh 123` GitHub PR workflow](https://github.com/modem-dev/hunk/tree/main/examples/extensions/github-pr),
+Installable examples include
 [review triage](https://github.com/modem-dev/hunk/tree/main/examples/extensions/review-triage),
 [authoritative review snapshot export](https://github.com/modem-dev/hunk/tree/main/examples/extensions/review-snapshot-export), an optional
 [rendered Markdown file view](https://github.com/modem-dev/hunk/tree/main/examples/extensions/rendered-markdown), and a

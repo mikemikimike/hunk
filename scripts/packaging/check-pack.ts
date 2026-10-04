@@ -2,7 +2,10 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { checkExtensionConsumerTypes } from "./extension-consumer-check";
+import {
+  checkExtensionConsumerTypes,
+  FILE_VIEW_SYNTAX_CONSUMER_SOURCE,
+} from "./extension-consumer-check";
 import { buildDocExamples } from "./extension-doc-examples";
 import { checkPackedPublicConsumers } from "./packed-public-consumer-check";
 import { npmCommand } from "./script-helpers";
@@ -29,6 +32,8 @@ import type {
   ExtensionCommandControls,
   ExtensionCommandExecutionOptions,
   ExtensionFileLanguageMatcher,
+  ExtensionFileViewCodeDocument,
+  ExtensionFileViewLayout,
   ExtensionFileViewRow,
   ExtensionFileViewRowComponentProps,
   ExtensionFileViewSourceRange,
@@ -78,6 +83,7 @@ export default function (hunk: HunkExtensionAPI) {
   const sessionOptions: ExtensionSessionOptions = { viewPreferences: "transient" };
   hunk.configureSession(sessionOptions);
   const noSelection: ExtensionReviewSelection = {
+    files: [],
     file: null,
     hunkIndex: null,
     currentLine: null,
@@ -153,6 +159,11 @@ export default function (hunk: HunkExtensionAPI) {
     return null;
   };
   const sourceRange: ExtensionFileViewSourceRange = { side: "new", range: [1, 1] };
+  const codeDocument: ExtensionFileViewCodeDocument = {
+    id: "rendered-markdown",
+    text: "# rendered markdown",
+    language: "markdown",
+  };
   const componentRow: ExtensionFileViewRow = {
     id: "component",
     spans: [{ text: "fallback" }],
@@ -187,10 +198,25 @@ export default function (hunk: HunkExtensionAPI) {
       // @ts-expect-error The single layout input is readonly.
       input.width = 1;
       hunk.log(document ?? String(firstRange?.[0] ?? input.width));
-      return {
-        rows: [componentRow],
-        hunkRows: (input.file.hunks ?? []).map(() => ({ startRow: 0, endRow: 0 })),
+      const layout: ExtensionFileViewLayout = {
+        codeDocuments: [codeDocument],
+        rows: [
+          {
+            id: "syntax",
+            spans: [
+              {
+                text: "# rendered markdown",
+                tone: "muted",
+                attributes: ["bold"],
+                syntax: { documentId: codeDocument.id, line: 1, range: [0, 19] },
+              },
+            ],
+          },
+          componentRow,
+        ],
+        hunkRows: (input.file.hunks ?? []).map(() => ({ startRow: 0, endRow: 1 })),
       };
+      return layout;
     },
   });
   const matchTone: ExtensionLineHighlightTone = "match";
@@ -469,10 +495,10 @@ for (const file of pack.files) {
   }
 }
 
-// The private provider workspaces compile into Hunk's runtime bundle. None may survive as a
-// runtime import that an npm install would have to resolve separately.
+// Private bundled workspaces compile into Hunk's runtime bundle. None may survive as a runtime
+// import that an npm install would have to resolve separately.
 const bundledRuntime = readFileSync(path.join(appRoot, "dist", "npm", "main.js"), "utf8");
-for (const packageName of ["@hunk/git", "@hunk/jj", "@hunk/sapling", "@hunk/vcs"]) {
+for (const packageName of ["@hunk/gh", "@hunk/git", "@hunk/jj", "@hunk/sapling", "@hunk/vcs"]) {
   const escapedName = packageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (
     new RegExp(`(?:from\\s*|import\\s*\\(\\s*)["']${escapedName}(?:/|["'])`).test(bundledRuntime)
@@ -561,6 +587,7 @@ const { modes } = checkExtensionConsumerTypes({
   repoRoot,
   sources: [
     { name: "consumer.ts", text: CONSUMER_SOURCE },
+    FILE_VIEW_SYNTAX_CONSUMER_SOURCE,
     ...docExamples.map((example) => ({ name: example.name, text: example.text })),
   ],
 });
