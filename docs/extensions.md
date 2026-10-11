@@ -41,6 +41,9 @@ keeps its origin even if the same file is also discovered somewhere else.
 | 4     | `.hunk/extensions/` in the repo under review         | **prompts for trust** |
 | 4     | `[extensions] paths` in the repo `.hunk/config.toml` | **prompts for trust** |
 
+The global source uses an absolute `$XDG_STATE_HOME` when set; otherwise it
+falls back to `~/.local/state` (or the platform home directory equivalent).
+
 The two repo-local sources share a group number because they are one group:
 both are repo-controlled, so they share a trust decision and their paths are
 sorted together rather than one source being loaded ahead of the other.
@@ -297,7 +300,8 @@ Run this repository's extensions?
   asked again next time.
 - **Never** records a denial so Hunk stops offering.
 
-Decisions are stored per repository root in `~/.config/hunk/state.json`. The
+Decisions are stored per repository root in `$XDG_STATE_HOME/hunk/state.json`
+(defaulting to `~/.local/state/hunk/state.json`). The
 prompt is a normal dialog over the review stream, not a gate in front of it:
 you can dismiss it and keep reviewing.
 

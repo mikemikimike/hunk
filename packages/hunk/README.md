@@ -291,7 +291,8 @@ minor releases while it stabilizes; breaking changes are called out in
 release notes.
 
 Hunk loads plain TypeScript extensions from `$XDG_STATE_HOME/hunk/extensions/`
-(defaulting to `~/.local/state/hunk/extensions/`), from a repository's
+when `$XDG_STATE_HOME` is absolute, or from `~/.local/state/hunk/extensions/`
+otherwise. It also loads from a repository's
 `.hunk/extensions/` (after you explicitly trust that repository),
 and from `--extension <path>` for development. `--no-extensions` turns those off
 for one run; Hunk's own bundled backends (Git, Jujutsu, and Sapling) stay loaded.

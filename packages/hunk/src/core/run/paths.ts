@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 export { resolveCanonicalPath } from "@hunk/vcs/path";
 
 /**
@@ -45,7 +45,7 @@ export function resolveUserConfigDir(env: NodeJS.ProcessEnv = process.env) {
 
 /** Resolve the base state directory Hunk should use for user-scoped files. */
 export function resolveUserStateDir(env: NodeJS.ProcessEnv = process.env) {
-  if (env.XDG_STATE_HOME) {
+  if (env.XDG_STATE_HOME && isAbsolute(env.XDG_STATE_HOME)) {
     return env.XDG_STATE_HOME;
   }
 

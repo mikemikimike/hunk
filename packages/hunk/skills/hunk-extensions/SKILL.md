@@ -59,8 +59,8 @@ The examples, by what they demonstrate:
 | `~/.local/state/hunk/extensions/` (XDG-aware) | runs immediately |
 | `.hunk/extensions/` or repo-config `paths`    | **trust prompt** |
 
-The global source uses `$XDG_STATE_HOME` when it is set, and otherwise falls
-back to `~/.local/state` (or the platform home directory equivalent).
+The global source uses an absolute `$XDG_STATE_HOME` when set; otherwise it
+falls back to `~/.local/state` (or the platform home directory equivalent).
 
 Only the repo-local group is gated. Everything else — including `--extension`,
 even when its path points inside the repository under review — is read as
@@ -353,7 +353,8 @@ Practical checks, in order of cost:
 - Notice naming the extension → id rejected (reserved, malformed, or already
   claimed), import failure, missing default export, or a throwing factory.
 - Repo-local extension silently absent → the trust prompt was dismissed or denied;
-  decisions are stored per repo root in `~/.config/hunk/state.json`.
+  decisions are stored per repo root in `$XDG_STATE_HOME/hunk/state.json`,
+  defaulting to `~/.local/state/hunk/state.json`.
 - Pane closes with a toast → the component threw; a second React copy is
   the usual cause.
 - Pane or file view never appears → nothing opened it (no `defaultOpen`, no

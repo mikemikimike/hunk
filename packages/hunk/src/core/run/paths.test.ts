@@ -39,6 +39,17 @@ describe("paths", () => {
     );
   });
 
+  test("ignores a relative XDG_STATE_HOME", () => {
+    const env = {
+      HOME: join("/tmp", "home"),
+      XDG_STATE_HOME: join("relative", "state"),
+    } as NodeJS.ProcessEnv;
+
+    expect(resolveAppStatePath(env)).toBe(
+      join("/tmp", "home", ".local", "state", "hunk", "state.json"),
+    );
+  });
+
   test("falls back to HOME for config and state paths", () => {
     const env = { HOME: join("/tmp", "home") } as NodeJS.ProcessEnv;
 

@@ -32,6 +32,7 @@ Writing one with a coding agent? `hunk skill path hunk-extensions` prints a bund
 | 4     | `.hunk/extensions/` in the repo under review         | after [trust](#trust) |
 | 4     | `[extensions] paths` in the repo `.hunk/config.toml` | after [trust](#trust) |
 
+- The global source uses an absolute `$XDG_STATE_HOME` when set; otherwise it falls back to `~/.local/state` (or the platform home directory equivalent).
 - Groups load in order; within a group, entries sort alphabetically by resolved path. The first occurrence of a path wins.
 - The two repo-local sources are one group: one trust decision, one sort order.
 - A directory source matches `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.mjs` directly inside it, plus one level of folder extensions.
@@ -130,7 +131,7 @@ Run this repository's extensions?
 
 **Trust** records the decision and reloads the session; **not now** asks again next time; **never** stops the offers. The prompt is a dialog over the review stream, not a gate in front of it — dismiss it and keep reviewing.
 
-Decisions are stored per repository root in `~/.config/hunk/state.json`, keyed by path (the VS Code workspace-trust model). A different repository later occupying a trusted path inherits the decision; clear the entry if that matters for a path you reuse.
+Decisions are stored per repository root in `$XDG_STATE_HOME/hunk/state.json` (defaulting to `~/.local/state/hunk/state.json`), keyed by path (the VS Code workspace-trust model). A different repository later occupying a trusted path inherits the decision; clear the entry if that matters for a path you reuse.
 
 ## Failure isolation
 
