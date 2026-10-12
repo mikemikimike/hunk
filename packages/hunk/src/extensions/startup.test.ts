@@ -172,7 +172,7 @@ describe("extension startup", () => {
     const result = await loadStartupExtensions({
       extensions: createExtensionsConfig(),
       cwd: home,
-      env: { XDG_CONFIG_HOME: home } as NodeJS.ProcessEnv,
+      env: { XDG_STATE_HOME: home } as NodeJS.ProcessEnv,
     });
     const commands = resolveExtensionCliCommands(result.registry);
 
@@ -282,7 +282,7 @@ export default function (hunk) {
     const provisional = await loadStartupExtensions({
       extensions: createExtensionsConfig(),
       cwd: home,
-      env: { XDG_CONFIG_HOME: home } as NodeJS.ProcessEnv,
+      env: { XDG_STATE_HOME: home } as NodeJS.ProcessEnv,
     });
     const rebuilt = await loadStartupExtensions({
       extensions: createExtensionsConfig({
@@ -290,7 +290,7 @@ export default function (hunk) {
         disabled: ["selected"],
       }),
       cwd: home,
-      env: { XDG_CONFIG_HOME: home } as NodeJS.ProcessEnv,
+      env: { XDG_STATE_HOME: home } as NodeJS.ProcessEnv,
       previousLoad: provisional,
     });
 

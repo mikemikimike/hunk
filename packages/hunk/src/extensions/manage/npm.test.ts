@@ -496,15 +496,15 @@ test("mixed Git/npm updates preserve legacy records and keep colliding display n
   registry.publish("same-name", "1.1.0");
   const out: string[] = [];
   const io = {
-    env: { ...context.env, XDG_CONFIG_HOME: join(root, "config") },
+    env: { ...context.env, XDG_STATE_HOME: join(root, "state") },
     stdout: (text: string) => out.push(text),
     stderr: () => {},
   };
   // Point command storage at the same managed root used above.
-  const configInstalled = join(root, "config", "hunk", "extensions", "installed");
-  mkdirSync(join(configInstalled, ".."), { recursive: true });
-  renameSync(context.installedRoot, configInstalled);
-  context.installedRoot = configInstalled;
+  const stateInstalled = join(root, "state", "hunk", "extensions", "installed");
+  mkdirSync(join(stateInstalled, ".."), { recursive: true });
+  renameSync(context.installedRoot, stateInstalled);
+  context.installedRoot = stateInstalled;
   await runExtensionManageCommand({ kind: "extension-manage", action: "update" }, io);
   expect(out.join("")).toContain("Updated same-name to v1.1.0");
   expect(out.join("")).toContain("same-name is already up to date");
@@ -521,7 +521,7 @@ test("npm uses the existing command confirmation, output, update and removal flo
   registry.publish("hunk-test-command", "1.0.0");
   const out: string[] = [];
   const io = {
-    env: { ...registry.env, XDG_CONFIG_HOME: root },
+    env: { ...registry.env, XDG_STATE_HOME: root },
     stdout: (text: string) => out.push(text),
     stderr: () => {},
     confirm: async () => false,
