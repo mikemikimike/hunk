@@ -19,35 +19,31 @@ function createTempRoot(prefix: string) {
 describe("paths", () => {
   test("resolves XDG config and state paths", () => {
     const env = {
-      XDG_CONFIG_HOME: join("/tmp", "xdg-config"),
-      XDG_STATE_HOME: join("/tmp", "xdg-state"),
+      XDG_CONFIG_HOME: join(tmpdir(), "xdg-config"),
+      XDG_STATE_HOME: join(tmpdir(), "xdg-state"),
     } as NodeJS.ProcessEnv;
 
-    expect(resolveGlobalConfigPath(env)).toBe(join("/tmp", "xdg-config", "hunk", "config.toml"));
-    expect(resolveAppStatePath(env)).toBe(join("/tmp", "xdg-state", "hunk", "state.json"));
-    expect(resolveGlobalExtensionsDir(env)).toBe(join("/tmp", "xdg-state", "hunk", "extensions"));
+    expect(resolveGlobalConfigPath(env)).toBe(join(tmpdir(), "xdg-config", "hunk", "config.toml"));
+    expect(resolveAppStatePath(env)).toBe(join(tmpdir(), "xdg-state", "hunk", "state.json"));
+    expect(resolveGlobalExtensionsDir(env)).toBe(
+      join(tmpdir(), "xdg-config", "hunk", "extensions"),
+    );
   });
 
-  test("falls back to the platform-independent XDG state location", () => {
-    const env = { HOME: join("/tmp", "home") } as NodeJS.ProcessEnv;
+  test("falls back to XDG state while keeping extensions in the config directory", () => {
+    const env = { HOME: join(tmpdir(), "home") } as NodeJS.ProcessEnv;
 
-    expect(resolveAppStatePath(env)).toBe(
-      join("/tmp", "home", ".local", "state", "hunk", "state.json"),
-    );
-    expect(resolveGlobalExtensionsDir(env)).toBe(
-      join("/tmp", "home", ".local", "state", "hunk", "extensions"),
-    );
+    expect(resolveAppStatePath(env)).toBe(join(env.HOME!, ".local", "state", "hunk", "state.json"));
+    expect(resolveGlobalExtensionsDir(env)).toBe(join(env.HOME!, ".config", "hunk", "extensions"));
   });
 
   test("ignores a relative XDG_STATE_HOME", () => {
     const env = {
-      HOME: join("/tmp", "home"),
+      HOME: join(tmpdir(), "home"),
       XDG_STATE_HOME: join("relative", "state"),
     } as NodeJS.ProcessEnv;
 
-    expect(resolveAppStatePath(env)).toBe(
-      join("/tmp", "home", ".local", "state", "hunk", "state.json"),
-    );
+    expect(resolveAppStatePath(env)).toBe(join(env.HOME!, ".local", "state", "hunk", "state.json"));
   });
 
   test("falls back to HOME for config and state paths", () => {

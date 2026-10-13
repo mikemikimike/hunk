@@ -67,8 +67,8 @@ export function resolveAppStatePath(env: NodeJS.ProcessEnv = process.env) {
 
 /** Resolve the user-scoped directory Hunk scans for globally installed extensions. */
 export function resolveGlobalExtensionsDir(env: NodeJS.ProcessEnv = process.env) {
-  const stateDir = resolveUserStateDir(env);
-  return stateDir ? join(stateDir, "hunk", "extensions") : undefined;
+  const configDir = resolveUserConfigDir(env);
+  return configDir ? join(configDir, "hunk", "extensions") : undefined;
 }
 
 /**

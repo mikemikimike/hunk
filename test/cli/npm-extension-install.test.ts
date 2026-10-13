@@ -72,12 +72,10 @@ export default function (hunk) {
 }`,
       };
       const config = join(root, "config");
-      const state = join(root, "state");
       const env = {
         ...process.env,
         ...registry.env,
         XDG_CONFIG_HOME: config,
-        XDG_STATE_HOME: state,
         HUNK_TEST_PROJECT_TOKEN: authToken,
       };
 
@@ -109,12 +107,12 @@ export default function (hunk) {
         "v1.0.0 -> v1.1.0",
       );
       expect(run(["npm-test-command"])).toContain("Host API and dependency OK: 42");
-      const recordsPath = join(state, "hunk", "extensions", "installed", "records.json");
+      const recordsPath = join(config, "hunk", "extensions", "installed", "records.json");
       const before = readFileSync(recordsPath, "utf8");
       expect(before).not.toContain(authToken);
       const installName = Object.keys(JSON.parse(before))[0]!;
       expect(
-        existsSync(join(state, "hunk", "extensions", "installed", installName, ".npmrc")),
+        existsSync(join(config, "hunk", "extensions", "installed", installName, ".npmrc")),
       ).toBe(false);
       registry.publish("@hunk-cli-test/guide", "1.2.0", {
         manifest: { hunk: { extensions: ["./missing.ts"] } },

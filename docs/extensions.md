@@ -6,7 +6,7 @@ object. An entry may stand alone or be declared by a folder's optional
 `package.json` manifest; no build step is required.
 
 ```ts
-// ~/.local/state/hunk/extensions/hello.ts
+// ~/.config/hunk/extensions/hello.ts
 import type { HunkExtensionAPI } from "hunkdiff/extension";
 
 export default function (hunk: HunkExtensionAPI) {
@@ -37,12 +37,9 @@ keeps its origin even if the same file is also discovered somewhere else.
 | ----- | ---------------------------------------------------- | --------------------- |
 | 1     | `--extension <path>` (repeatable)                    | runs immediately      |
 | 2     | `[extensions] paths` in your user config             | runs immediately      |
-| 3     | `~/.local/state/hunk/extensions/`                    | runs immediately      |
+| 3     | `~/.config/hunk/extensions/`                         | runs immediately      |
 | 4     | `.hunk/extensions/` in the repo under review         | **prompts for trust** |
 | 4     | `[extensions] paths` in the repo `.hunk/config.toml` | **prompts for trust** |
-
-The global source uses an absolute `$XDG_STATE_HOME` when set; otherwise it
-falls back to `~/.local/state` (or the platform home directory equivalent).
 
 The two repo-local sources share a group number because they are one group:
 both are repo-controlled, so they share a trust decision and their paths are
@@ -58,7 +55,7 @@ order, so a folder shipping both a source and a built entry resolves the same
 everywhere). The manifest field is `hunk`:
 
 ```text
-~/.local/state/hunk/extensions/my-ext/
+~/.config/hunk/extensions/my-ext/
   package.json          # {"hunk": {"extensions": ["./src/index.ts"]}}
   node_modules/         # bun install / npm install, right here
   src/
@@ -144,7 +141,7 @@ repository's own README.
 
 Extensions can be shared as Git repositories or npm packages.
 `hunk extension install` installs either source into a managed directory under
-`~/.local/state/hunk/extensions/installed/`, validates its extension entries, and
+`~/.config/hunk/extensions/installed/`, validates its extension entries, and
 records the requested source plus its resolved Git commit or npm version.
 Git and local-checkout sources keep the repository name as their install directory:
 
@@ -195,7 +192,7 @@ and punctuation, stays filesystem-safe, and does not change with the version.
 Use that ID in `[extension.<id>]` configuration; multi-entry manifests retain the
 existing entry-derived IDs. Failed acquisition or validation leaves the previous
 install intact. Managed installs never collide with
-extensions you copied into `~/.local/state/hunk/extensions/` by hand, and the
+extensions you copied into `~/.config/hunk/extensions/` by hand, and the
 installer refuses to overwrite an unmanaged directory of the same name.
 
 ### Publishing an extension
@@ -300,8 +297,7 @@ Run this repository's extensions?
   asked again next time.
 - **Never** records a denial so Hunk stops offering.
 
-Decisions are stored per repository root in `$XDG_STATE_HOME/hunk/state.json`
-(defaulting to `~/.local/state/hunk/state.json`). The
+Decisions are stored per repository root in `~/.config/hunk/state.json`. The
 prompt is a normal dialog over the review stream, not a gate in front of it:
 you can dismiss it and keep reviewing.
 
@@ -972,7 +968,7 @@ Render a React component on the `left`, `right`, `top`, or `bottom` edge of the
 review. Pair it with `registerCommand` so a key opens it:
 
 ```tsx
-// ~/.local/state/hunk/extensions/flat-pane.tsx
+// ~/.config/hunk/extensions/flat-pane.tsx
 import { useMemo } from "react";
 import type { ExtensionPaneProps, HunkExtensionAPI } from "hunkdiff/extension";
 
@@ -1399,7 +1395,7 @@ geometry.
 The installable
 [`examples/extensions/rendered-markdown/`](../examples/extensions/rendered-markdown/)
 uses this contract for a parsed Markdown preview. It is intentionally not bundled
-or loaded by default; copy the folder into `~/.local/state/hunk/extensions/`, install
+or loaded by default; copy the folder into `~/.config/hunk/extensions/`, install
 its dependency there, and its View entry and `F8` command become available.
 
 ```ts
@@ -2565,7 +2561,7 @@ Collapse lockfiles and generated output out of every review, and say how many
 files were hidden.
 
 ```ts
-// ~/.local/state/hunk/extensions/collapse-generated.ts
+// ~/.config/hunk/extensions/collapse-generated.ts
 import type { HunkExtensionAPI } from "hunkdiff/extension";
 
 /** Match one path against a `*`-only glob, anchored at both ends. */

@@ -195,6 +195,11 @@ You can persist preferences to a config file:
 - `~/.config/hunk/config.toml`
 - `.hunk/config.toml`
 
+Persistent state uses `$XDG_STATE_HOME/hunk/state.json` when the variable is
+absolute, or `~/.local/state/hunk/state.json` otherwise. Hunk preserves existing
+state by copying the old config-directory file on first use, keeping the original
+and falling back to it if migration fails. Global extension paths are unchanged.
+
 Example:
 
 ```toml
@@ -290,10 +295,8 @@ The extension API is experimental and may change in breaking ways between
 minor releases while it stabilizes; breaking changes are called out in
 release notes.
 
-Hunk loads plain TypeScript extensions from `$XDG_STATE_HOME/hunk/extensions/`
-when `$XDG_STATE_HOME` is absolute, or from `~/.local/state/hunk/extensions/`
-otherwise. It also loads from a repository's
-`.hunk/extensions/` (after you explicitly trust that repository),
+Hunk loads plain TypeScript extensions from `~/.config/hunk/extensions/`, from a
+repository's `.hunk/extensions/` (after you explicitly trust that repository),
 and from `--extension <path>` for development. `--no-extensions` turns those off
 for one run; Hunk's own bundled backends (Git, Jujutsu, and Sapling) stay loaded.
 
@@ -304,7 +307,7 @@ the file-navigation sidebar with its own React component, react to lifecycle
 events, and show transient messages:
 
 ```ts
-// ~/.local/state/hunk/extensions/collapse-lockfiles.ts
+// ~/.config/hunk/extensions/collapse-lockfiles.ts
 import type { HunkExtensionAPI } from "hunkdiff/extension";
 
 export default function (hunk: HunkExtensionAPI) {

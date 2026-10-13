@@ -2,4 +2,4 @@
 "hunkdiff": patch
 ---
 
-Store Hunk state and globally installed extensions under the XDG state directory.
+Store persistent Hunk state under the XDG state directory while preserving existing state and global extension locations.

@@ -6,7 +6,7 @@ description: Load plain TypeScript extensions, understand discovery and trust, a
 A Hunk extension is one TypeScript (or JavaScript) file that default-exports a function. Hunk imports it at startup and hands it an API object. No build step is required.
 
 ```ts
-// ~/.local/state/hunk/extensions/hello.ts
+// ~/.config/hunk/extensions/hello.ts
 import type { HunkExtensionAPI } from "hunkdiff/extension";
 
 export default function (hunk: HunkExtensionAPI) {
@@ -28,11 +28,10 @@ Writing one with a coding agent? `hunk skill path hunk-extensions` prints a bund
 | ----- | ---------------------------------------------------- | --------------------- |
 | 1     | `--extension <path>` (repeatable)                    | immediately           |
 | 2     | `[extensions] paths` in your user config             | immediately           |
-| 3     | `~/.local/state/hunk/extensions/`                    | immediately           |
+| 3     | `~/.config/hunk/extensions/`                         | immediately           |
 | 4     | `.hunk/extensions/` in the repo under review         | after [trust](#trust) |
 | 4     | `[extensions] paths` in the repo `.hunk/config.toml` | after [trust](#trust) |
 
-- The global source uses an absolute `$XDG_STATE_HOME` when set; otherwise it falls back to `~/.local/state` (or the platform home directory equivalent).
 - Groups load in order; within a group, entries sort alphabetically by resolved path. The first occurrence of a path wins.
 - The two repo-local sources are one group: one trust decision, one sort order.
 - A directory source matches `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.mjs` directly inside it, plus one level of folder extensions.
@@ -45,7 +44,7 @@ Writing one with a coding agent? `hunk skill path hunk-extensions` prints a bund
 A folder is an extension if its `package.json` declares entries under the `hunk` field, or failing that if it has an `index.{ts,tsx,js,jsx,mjs}` (in that preference order):
 
 ```text
-~/.local/state/hunk/extensions/my-ext/
+~/.config/hunk/extensions/my-ext/
   package.json          # {"hunk": {"extensions": ["./src/index.ts"]}}
   node_modules/         # bun install / npm install, right here
   src/
@@ -70,7 +69,7 @@ Ids start with a letter or digit, then letters, digits, `-`, or `_`. `hunk`, `gi
 
 ## Installing shared extensions
 
-Extensions are shared as Git repositories or npm packages. `hunk extension install` installs either source under `~/.local/state/hunk/extensions/installed/`, validates its entries, and records the requested source and resolved commit or package version:
+Extensions are shared as Git repositories or npm packages. `hunk extension install` installs either source under `~/.config/hunk/extensions/installed/`, validates its entries, and records the requested source and resolved commit or package version:
 
 ```bash
 hunk extension install acme/hunk-word-diff          # GitHub shorthand
@@ -85,7 +84,7 @@ hunk extension install npm:@acme/hunk-word-diff@next
 
 - `hunk extension list` shows every managed install with its version, commit, and source.
 - `hunk extension update [name]` refreshes one install (or all of them) from its recorded source. Git refs and exact npm versions stay pinned; npm ranges and tags are re-resolved.
-- `hunk extension remove <name>` deletes the install and its record. Hand-copied extensions in `~/.local/state/hunk/extensions/` are never touched.
+- `hunk extension remove <name>` deletes the install and its record. Hand-copied extensions in `~/.config/hunk/extensions/` are never touched.
 
 Installing is the consent step: extensions run with your full user permissions, so a fresh install asks for confirmation (or takes `--yes`) after naming the source. Only install sources you trust. Managed installs then load through the global group above — same precedence, no further prompts.
 
@@ -131,7 +130,7 @@ Run this repository's extensions?
 
 **Trust** records the decision and reloads the session; **not now** asks again next time; **never** stops the offers. The prompt is a dialog over the review stream, not a gate in front of it — dismiss it and keep reviewing.
 
-Decisions are stored per repository root in `$XDG_STATE_HOME/hunk/state.json` (defaulting to `~/.local/state/hunk/state.json`), keyed by path (the VS Code workspace-trust model). A different repository later occupying a trusted path inherits the decision; clear the entry if that matters for a path you reuse.
+Decisions are stored per repository root in `~/.config/hunk/state.json`, keyed by path (the VS Code workspace-trust model). A different repository later occupying a trusted path inherits the decision; clear the entry if that matters for a path you reuse.
 
 ## Failure isolation
 
@@ -170,7 +169,7 @@ some_key = "some value"
 Collapse lockfiles and generated output out of every review, and say how many files were hidden.
 
 ```ts
-// ~/.local/state/hunk/extensions/collapse-generated.ts
+// ~/.config/hunk/extensions/collapse-generated.ts
 import type { HunkExtensionAPI } from "hunkdiff/extension";
 
 /** Match one path against a `*`-only glob, anchored at both ends. */

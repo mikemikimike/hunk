@@ -10,7 +10,7 @@ factory**. Hunk imports it at startup and hands it an API object. No build step,
 no manifest required.
 
 ```ts
-// ~/.local/state/hunk/extensions/hello.ts
+// ~/.config/hunk/extensions/hello.ts
 import type { HunkExtensionAPI } from "hunkdiff/extension";
 
 export default function (hunk: HunkExtensionAPI) {
@@ -52,15 +52,12 @@ The examples, by what they demonstrate:
 
 ## Where extensions live
 
-| Source                                        | Trust            |
-| --------------------------------------------- | ---------------- |
-| `--extension <path>` (repeatable)             | runs immediately |
-| `[extensions] paths` in user config           | runs immediately |
-| `~/.local/state/hunk/extensions/` (XDG-aware) | runs immediately |
-| `.hunk/extensions/` or repo-config `paths`    | **trust prompt** |
-
-The global source uses an absolute `$XDG_STATE_HOME` when set; otherwise it
-falls back to `~/.local/state` (or the platform home directory equivalent).
+| Source                                     | Trust            |
+| ------------------------------------------ | ---------------- |
+| `--extension <path>` (repeatable)          | runs immediately |
+| `[extensions] paths` in user config        | runs immediately |
+| `~/.config/hunk/extensions/` (XDG-aware)   | runs immediately |
+| `.hunk/extensions/` or repo-config `paths` | **trust prompt** |
 
 Only the repo-local group is gated. Everything else — including `--extension`,
 even when its path points inside the repository under review — is read as
@@ -78,7 +75,7 @@ every machine that loads it — keep a repo-shared extension dependency-free.
 
 Shared extensions install from git with `hunk extension install <source>`
 (`owner/repo[@ref]`, `git:host/path[@ref]`, a git URL, or a local path) into
-`~/.local/state/hunk/extensions/installed/<repo-name>/`, where they load with global
+`~/.config/hunk/extensions/installed/<repo-name>/`, where they load with global
 origin; `list`, `update`, and `remove` manage them. Declared `dependencies` are
 `bun install`ed at install time. The manifest may state
 `{"hunk": {"apiVersion": N}}` — the minimum extension API version — and an older
@@ -353,8 +350,7 @@ Practical checks, in order of cost:
 - Notice naming the extension → id rejected (reserved, malformed, or already
   claimed), import failure, missing default export, or a throwing factory.
 - Repo-local extension silently absent → the trust prompt was dismissed or denied;
-  decisions are stored per repo root in `$XDG_STATE_HOME/hunk/state.json`,
-  defaulting to `~/.local/state/hunk/state.json`.
+  decisions are stored per repo root in `~/.config/hunk/state.json`.
 - Pane closes with a toast → the component threw; a second React copy is
   the usual cause.
 - Pane or file view never appears → nothing opened it (no `defaultOpen`, no
